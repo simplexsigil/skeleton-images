@@ -43,6 +43,7 @@ class ImgType(object):
         self.img_list = []
         self.img_type = ''
         self.num_imgs = 0
+        self.resize = True
 
     def __init__(self, img_type: str) -> None:
         self.temporal_scale = [1]
@@ -53,6 +54,7 @@ class ImgType(object):
         self.img_list = []
         self.img_type = img_type
         self.num_imgs = 0
+        self.resize = True
 
     def __del__(self) -> None:
         del self.img_list
@@ -177,8 +179,9 @@ class CaetanoMagnitude(ImgType):
         ret = ImgType.normalize(ret, 0.0, 1, 1.0, 0.0)
         return ret
 
-    def process_skl_file(self, skl_file: str, path_to_save: str) -> str:
+    def process_skl_file(self, skl_file: str, path_to_save: str, resize=True) -> str:
         extraction = ''
+        list_path_to_save = []
         try:
             self.height_resized = len(ImgType.depth_first_traversal_skl_NTU)
             if len(self.temporal_scale) > 1:
@@ -188,7 +191,6 @@ class CaetanoMagnitude(ImgType):
             self.kinect_data.read_data(skl_file)
             self.set_height(len(ImgType.depth_first_traversal_skl_NTU))  # self.set_height(self.kinect_data.n_joints)
             self.set_width(self.kinect_data.n_frames)
-            list_path_to_save = []
             for k_body in range(self.kinect_data.n_bodies):
                 img = np.zeros((self.height, self.width, self.channels), np.float)
                 for i_frames in range(self.kinect_data.n_frames):
@@ -201,7 +203,10 @@ class CaetanoMagnitude(ImgType):
                                 diff_joint = np.array(self.compute_temporal_joint_difference(i_frames, j_joints, k_body, t_scale))
                                 mag_values.append(self.compute_joint_magnitude(diff_joint))
                             img[j_pos, i_frames] = tuple(mag_values)
-                self.img_list.append(cv2.resize(img, (self.width_resized, self.height_resized)))
+                if resize:
+                    self.img_list.append(cv2.resize(img, (self.width_resized, self.height_resized)))
+                else:
+                    self.img_list.append(img)
                 f_save = self.generate_file_name(skl_file, k_body)
                 list_path_to_save.append(os.path.join(path_to_save, f_save))
             self.save_img_list(list_path_to_save)
@@ -238,7 +243,7 @@ class CaetanoOrientation(ImgType):
         ret = CaetanoOrientation.normalize(ret, -180.0, 180.0, 1.0, -1.0)
         return ret
 
-    def process_skl_file(self, skl_file: str, path_to_save: str) -> str:
+    def process_skl_file(self, skl_file: str, path_to_save: str, resize=True) -> str:
         extraction = ''
         try:
             self.height_resized = len(ImgType.depth_first_traversal_skl_NTU)
@@ -280,7 +285,11 @@ class CaetanoOrientation(ImgType):
                                 ori_values.append(ori_yz_value)
                                 ori_values.append(ori_zx_value)
                             img[j_pos, i_frames] = tuple(ori_values)
-                self.img_list.append(cv2.resize(img, (self.width_resized, self.height_resized)))
+                if resize:
+                    self.img_list.append(cv2.resize(img, (self.width_resized, self.height_resized)))
+                else:
+                    self.img_list.append(img)
+
                 f_save = self.generate_file_name(skl_file, k_body)
                 list_path_to_save.append(os.path.join(path_to_save, f_save))
             self.save_img_list(list_path_to_save)

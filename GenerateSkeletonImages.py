@@ -14,6 +14,7 @@ def get_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
                                                                    '3 - CaetanoTSRJI (TSRJI - SIBGRAPI2019)', default=1)
     parser.add_argument('--temp_dist', nargs='+', type=int, help='Temporal distance between frames', default=1)
     parser.add_argument('--path_to_save', type=str, help='directory to save the skeleton images')
+    parser.add_argument('--no-resize', nargs='?', type=bool, const=True, help='If true, images will be resized to a fixed width of 100, independent of frame count.', default=False)
     args = parser.parse_args()
     print(args)
     return args
@@ -43,19 +44,20 @@ def check_path(path_to_check: str) -> None:
 
 
 def worker(args: tuple):
-    obj, method_name, skl_file, path_to_save, temp_dist = args
-    getattr(obj, 'set_temporal_scale')(temp_dist)
-    ret = getattr(obj, method_name)(skl_file, path_to_save)
+    obj, method_name, skl_file, path_to_save, temp_dist, resize = args
+    getattr(obj, 'set_temporal_scale')([temp_dist])
+    ret = getattr(obj, method_name)(skl_file, path_to_save, resize)
     return ret
 
 
 def main(parser: argparse.ArgumentParser) -> None:
     args = get_arguments(parser)
+    print(args)
     check_path(args.path_to_save)
     skl_list = get_skeleton_files(args.data_path)
     obj_list = [ImgType.class_img_types[args.img_type]() for _ in range(0, len(skl_list))]
     pool = mp.Pool(mp.cpu_count())
-    list_extraction = pool.map(worker, ((obj, 'process_skl_file', skl_file, args.path_to_save, args.temp_dist) for obj, skl_file in zip(obj_list, skl_list)))
+    list_extraction = pool.map(worker, ((obj, 'process_skl_file', skl_file, args.path_to_save, args.temp_dist, not args.no_resize) for obj, skl_file in zip(obj_list, skl_list)))
     pool.close()
     pool.join()
     pool.terminate()
