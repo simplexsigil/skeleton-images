@@ -15,6 +15,8 @@ def get_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     parser.add_argument('--temp_dist', nargs='+', type=int, help='Temporal distance between frames', default=1)
     parser.add_argument('--path_to_save', type=str, help='directory to save the skeleton images')
     parser.add_argument('--no-resize', nargs='?', type=bool, const=True, help='If true, images will be resized to a fixed width of 100, independent of frame count.', default=False)
+    parser.add_argument('--input_format', type=str, choices=["nturgbd_csv", "openpose_json"], default="nturgbd_csv",
+                        help='If true, images will be resized to a fixed width of 100, independent of frame count.')
     args = parser.parse_args()
     print(args)
     return args
@@ -26,9 +28,15 @@ def save_extraction_list(list_extraction: List[str], path_to_save: str = '') -> 
     file.close()
 
 
-def get_skeleton_files(data_path: str) -> List[str]:
+def get_skeleton_files_csv(data_path: str) -> List[str]:
     file_list = []
     for file in glob.glob(os.path.join(data_path, '*.skeleton')):
+        file_list.append(file)
+    return file_list
+
+def get_skeleton_files_json(data_path: str) -> List[str]:
+    file_list = []
+    for file in glob.glob(os.path.join(data_path, '*.json')):
         file_list.append(file)
     return file_list
 
@@ -54,8 +62,15 @@ def main(parser: argparse.ArgumentParser) -> None:
     args = get_arguments(parser)
     print(args)
     check_path(args.path_to_save)
-    skl_list = get_skeleton_files(args.data_path)
-    obj_list = [ImgType.class_img_types[args.img_type]() for _ in range(0, len(skl_list))]
+    skl_list = []
+    if args.input_format == "nturgbd_csv":
+        skl_list = get_skeleton_files_csv(args.data_path)
+    elif args.input_format == "openpose_json":
+        skl_list = get_skeleton_files_json(args.data_path)
+    else:
+        raise ValueError
+
+    obj_list = [ImgType.class_img_types[args.img_type](args.input_format) for _ in range(0, len(skl_list))]
     pool = mp.Pool(mp.cpu_count())
     list_extraction = pool.map(worker, ((obj, 'process_skl_file', skl_file, args.path_to_save, args.temp_dist, not args.no_resize) for obj, skl_file in zip(obj_list, skl_list)))
     pool.close()

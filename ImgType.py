@@ -1,18 +1,35 @@
-import KinectData as kd
-import numpy as np
-import cv2
-import os
 import math
+import os
 from typing import Type, Dict, Union, List
+
+import cv2
+import numpy as np
+
+import KinectData as kd
 from KinectData import KinectData
+
 
 class ImgType(object):
     kinect_data: KinectData
 
-    #NTU 25 joints
+    # NTU 25 joints
     depth_first_traversal_skl_NTU = [1, 20, 2, 3, 2, 20, 4, 5, 6, 7, 21, 22, 21, 7, 6, 5, 4, 20,
                                      8, 9, 10, 11, 23, 24, 23, 11, 10, 9, 8, 20, 1, 0, 12, 13,
                                      14, 15, 14, 13, 12, 0, 16, 17, 18, 19, 18, 17, 16, 0, 1]
+
+    # NTU 25 joints
+    depth_first_traversal_skl_OpenPose = [8, 1, 11, 1, 0, 1,
+                                          1, 5, 5, 6, 6, 7,
+                                          7, 5, 7, 1, 6, 1,
+                                          1, 2, 2, 3, 3, 4,
+                                          4, 2, 4, 1, 3, 1,
+                                          1, 11, 11, 12, 12, 13,
+                                          1, 8, 8, 9, 9, 10,
+                                          4, 0, 7,
+                                          4, 10, 13, 7]
+
+    depth_first_traversal_skl = {"nturgbd_csv":   depth_first_traversal_skl_NTU,
+                                 "openpose_json": depth_first_traversal_skl_OpenPose}
 
     reference_joint_4_NTU = [1, 4, 20, 4, 2, 4, 3, 4, 2, 4, 20, 4, 5, 4, 6, 4, 7, 4, 21, 4, 22, 4, 21, 4,
                              7, 4, 6, 4, 5, 4, 20, 4, 8, 4, 9, 4, 10, 4, 11, 4, 23, 4, 24, 4, 23, 4, 11,
@@ -34,9 +51,10 @@ class ImgType(object):
                               16, 23, 16, 11, 16, 10, 16, 9, 16, 8, 16, 20, 16, 1, 16, 0, 16, 12, 16, 13, 16, 14, 16,
                               15, 16, 14, 16, 13, 16, 12, 16, 0, 16, 17, 16, 18, 16, 19, 16, 18, 16, 17, 16, 0, 16, 1]
 
-    def __init__(self) -> None:
+    def __init__(self, input_format: str) -> None:
         self.temporal_scale = [1]
-        self.kinect_data = kd.KinectData()
+        self.kinect_data = kd.from_format_desc(input_format)
+        self.input_format = input_format
         self.width = 0
         self.height = 0
         self.channels = 0
@@ -45,9 +63,10 @@ class ImgType(object):
         self.num_imgs = 0
         self.resize = True
 
-    def __init__(self, img_type: str) -> None:
+    def __init__(self, img_type: str, input_format: str) -> None:
         self.temporal_scale = [1]
-        self.kinect_data = kd.KinectData()
+        self.kinect_data = kd.from_format_desc(input_format)
+        self.input_format = input_format
         self.width = 0
         self.height = 0
         self.channels = 0
@@ -62,9 +81,9 @@ class ImgType(object):
 
     def compute_joint_difference(self, i_frame: int, j_joint: int, k_body: int) -> (float, float, float):
         ret = (0.0, 0.0, 0.0)
-        if (i_frame+1) < self.kinect_data.n_frames and self.kinect_data.kinect_blocks[i_frame+1].n_bodies > k_body:
+        if (i_frame + 1) < self.kinect_data.n_frames and self.kinect_data.kinect_blocks[i_frame + 1].n_bodies > k_body:
             joint_data_f1 = self.kinect_data.kinect_blocks[i_frame].body_list[k_body].joint_data[j_joint]
-            joint_data_f2 = self.kinect_data.kinect_blocks[i_frame+1].body_list[k_body].joint_data[j_joint]
+            joint_data_f2 = self.kinect_data.kinect_blocks[i_frame + 1].body_list[k_body].joint_data[j_joint]
             diff_x = joint_data_f1.x_joint - joint_data_f2.x_joint
             diff_y = joint_data_f1.y_joint - joint_data_f2.y_joint
             diff_z = joint_data_f1.z_joint - joint_data_f2.z_joint
@@ -82,11 +101,14 @@ class ImgType(object):
         for i in range(len(self.img_list)):
             np.savez(list_path_to_save[i], self.img_list[i])
 
-    def compute_temporal_joint_difference(self, i_frame: int, j_joint: int, k_body: int, temporal_dist: int) -> (float, float, float):
+    def compute_temporal_joint_difference(self, i_frame: int, j_joint: int, k_body: int, temporal_dist: int) -> (
+            float, float, float):
         ret = (0.0, 0.0, 0.0)
-        if (i_frame + temporal_dist) < self.kinect_data.n_frames and self.kinect_data.kinect_blocks[i_frame + temporal_dist].n_bodies > k_body:
+        if (i_frame + temporal_dist) < self.kinect_data.n_frames and self.kinect_data.kinect_blocks[
+            i_frame + temporal_dist].n_bodies > k_body:
             joint_data_f1 = self.kinect_data.kinect_blocks[i_frame].body_list[k_body].joint_data[j_joint]
-            joint_data_f2 = self.kinect_data.kinect_blocks[i_frame + temporal_dist].body_list[k_body].joint_data[j_joint]
+            joint_data_f2 = self.kinect_data.kinect_blocks[i_frame + temporal_dist].body_list[k_body].joint_data[
+                j_joint]
             diff_x = joint_data_f1.x_joint - joint_data_f2.x_joint
             diff_y = joint_data_f1.y_joint - joint_data_f2.y_joint
             diff_z = joint_data_f1.z_joint - joint_data_f2.z_joint
@@ -145,9 +167,9 @@ class ImgType(object):
     @staticmethod
     def show_skl_img_colormap(img: np.ndarray, str_text: str = 'Image') -> None:
         img_u = ImgType.convert_to_uint8(img, 0.0, 1.0)
-        #cv2.imshow(str_text, cv2.applyColorMap(img_u, cv2.COLORMAP_JET))
-        #cv2.waitKey(0)
-        #cv2.destroyAllWindows()
+        # cv2.imshow(str_text, cv2.applyColorMap(img_u, cv2.COLORMAP_JET))
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
         cv2.imwrite(str_text, cv2.applyColorMap(img_u, cv2.COLORMAP_HSV))
         print(str_text)
 
@@ -164,12 +186,12 @@ class ImgType(object):
         self.temporal_scale = temporal_scale
 
 
-#SkeleMotion - AVSS 2019
+# SkeleMotion - AVSS 2019
 class CaetanoMagnitude(ImgType):
-    def __init__(self) -> None:
-        super().__init__('CaetanoMagnitude')
+    def __init__(self, input_format) -> None:
+        super().__init__('CaetanoMagnitude', input_format)
         self.width_resized = 100
-        self.height_resized = len(self.depth_first_traversal_skl_NTU)  # 25
+        self.height_resized = len(self.depth_first_traversal_skl[self.input_format])  # 49
         self.num_imgs = 1
         self.channels = len(self.temporal_scale)
 
@@ -183,24 +205,25 @@ class CaetanoMagnitude(ImgType):
         extraction = ''
         list_path_to_save = []
         try:
-            self.height_resized = len(ImgType.depth_first_traversal_skl_NTU)
+            self.height_resized = len(ImgType.depth_first_traversal_skl[self.input_format])
             if len(self.temporal_scale) > 1:
                 self.set_channels(len(self.temporal_scale))  # varies according to method
             else:
                 self.set_channels(3)
             self.kinect_data.read_data(skl_file)
-            self.set_height(len(ImgType.depth_first_traversal_skl_NTU))  # self.set_height(self.kinect_data.n_joints)
+            self.set_height(len(ImgType.depth_first_traversal_skl[self.input_format]))  # self.set_height(self.kinect_data.n_joints)
             self.set_width(self.kinect_data.n_frames)
             for k_body in range(self.kinect_data.n_bodies):
                 img = np.zeros((self.height, self.width, self.channels), np.float)
                 for i_frames in range(self.kinect_data.n_frames):
                     if self.kinect_data.kinect_blocks[i_frames].n_bodies > k_body:
-                        for j_pos in range(len(ImgType.depth_first_traversal_skl_NTU)):
-                            j_joints = ImgType.depth_first_traversal_skl_NTU[j_pos]
+                        for j_pos in range(len(ImgType.depth_first_traversal_skl[self.input_format])):
+                            j_joints = ImgType.depth_first_traversal_skl[self.input_format][j_pos]
                             # TODO: version with normalization by the neck
                             mag_values = []
                             for t_scale in self.temporal_scale:
-                                diff_joint = np.array(self.compute_temporal_joint_difference(i_frames, j_joints, k_body, t_scale))
+                                diff_joint = np.array(
+                                    self.compute_temporal_joint_difference(i_frames, j_joints, k_body, t_scale))
                                 mag_values.append(self.compute_joint_magnitude(diff_joint))
                             img[j_pos, i_frames] = tuple(mag_values)
                 if resize:
@@ -221,7 +244,7 @@ class CaetanoMagnitude(ImgType):
             return extraction
 
 
-#SkeleMotion - AVSS 2019
+# SkeleMotion - AVSS 2019
 class CaetanoOrientation(ImgType):
     x: int = 0
     y: int = 1
@@ -230,10 +253,10 @@ class CaetanoOrientation(ImgType):
     diff_ori_val = 1.1
     mag_threshold = 0.004
 
-    def __init__(self) -> None:
-        super().__init__('CaetanoOrientation')
+    def __init__(self, input_format) -> None:
+        super().__init__('CaetanoOrientation', input_format)
         self.width_resized = 100
-        self.height_resized = len(self.depth_first_traversal_skl_NTU)  # 25
+        self.height_resized = len(self.depth_first_traversal_skl[self.input_format])
         self.num_imgs = 1
         self.channels = len(self.temporal_scale)
 
@@ -245,26 +268,28 @@ class CaetanoOrientation(ImgType):
 
     def process_skl_file(self, skl_file: str, path_to_save: str, resize=True) -> str:
         extraction = ''
+        list_path_to_save = []
         try:
-            self.height_resized = len(ImgType.depth_first_traversal_skl_NTU)
+            self.height_resized = len(ImgType.depth_first_traversal_skl[self.input_format])
             if len(self.temporal_scale) > 1:
                 self.set_channels(len(self.temporal_scale) * 3)  # varies according to method
             else:
                 self.set_channels(3)
             self.kinect_data.read_data(skl_file)
-            self.set_height(len(ImgType.depth_first_traversal_skl_NTU))  # self.set_height(self.kinect_data.n_joints)
+            self.set_height(len(ImgType.depth_first_traversal_skl[self.input_format]))  # self.set_height(self.kinect_data.n_joints)
             self.set_width(self.kinect_data.n_frames)
             list_path_to_save = []
             for k_body in range(self.kinect_data.n_bodies):
                 img = np.zeros((self.height, self.width, self.channels), np.float)
                 for i_frames in range(self.kinect_data.n_frames):
                     if self.kinect_data.kinect_blocks[i_frames].n_bodies > k_body:
-                        for j_pos in range(len(ImgType.depth_first_traversal_skl_NTU)):
-                            j_joints = ImgType.depth_first_traversal_skl_NTU[j_pos]
+                        for j_pos in range(len(ImgType.depth_first_traversal_skl[self.input_format])):
+                            j_joints = ImgType.depth_first_traversal_skl[self.input_format][j_pos]
                             # TODO: version with normalization by the neck
                             ori_values = []
                             for t_scale in self.temporal_scale:
-                                diff_joint = np.array(self.compute_temporal_joint_difference(i_frames, j_joints, k_body, t_scale))
+                                diff_joint = np.array(
+                                    self.compute_temporal_joint_difference(i_frames, j_joints, k_body, t_scale))
 
                                 if CaetanoOrientation.filter_by_magnitude:
                                     mag_val = CaetanoMagnitude.compute_joint_magnitude(diff_joint)
@@ -273,13 +298,19 @@ class CaetanoOrientation(ImgType):
                                         ori_yz_value = CaetanoOrientation.diff_ori_val
                                         ori_zx_value = CaetanoOrientation.diff_ori_val
                                     else:
-                                        ori_yx_value = CaetanoOrientation.compute_joint_orientation(diff_joint, self.y, self.x)
-                                        ori_yz_value = CaetanoOrientation.compute_joint_orientation(diff_joint, self.y, self.z)
-                                        ori_zx_value = CaetanoOrientation.compute_joint_orientation(diff_joint, self.z, self.x)
+                                        ori_yx_value = CaetanoOrientation.compute_joint_orientation(diff_joint, self.y,
+                                                                                                    self.x)
+                                        ori_yz_value = CaetanoOrientation.compute_joint_orientation(diff_joint, self.y,
+                                                                                                    self.z)
+                                        ori_zx_value = CaetanoOrientation.compute_joint_orientation(diff_joint, self.z,
+                                                                                                    self.x)
                                 else:
-                                    ori_yx_value = CaetanoOrientation.compute_joint_orientation(diff_joint, self.y, self.x)
-                                    ori_yz_value = CaetanoOrientation.compute_joint_orientation(diff_joint, self.y, self.z)
-                                    ori_zx_value = CaetanoOrientation.compute_joint_orientation(diff_joint, self.z, self.x)
+                                    ori_yx_value = CaetanoOrientation.compute_joint_orientation(diff_joint, self.y,
+                                                                                                self.x)
+                                    ori_yz_value = CaetanoOrientation.compute_joint_orientation(diff_joint, self.y,
+                                                                                                self.z)
+                                    ori_zx_value = CaetanoOrientation.compute_joint_orientation(diff_joint, self.z,
+                                                                                                self.x)
 
                                 ori_values.append(ori_yx_value)
                                 ori_values.append(ori_yz_value)
@@ -304,13 +335,13 @@ class CaetanoOrientation(ImgType):
             return extraction
 
 
-#Tree Structure Reference Joints Image (TSRJI) - SIBGRAPI 2019
+# Tree Structure Reference Joints Image (TSRJI) - SIBGRAPI 2019
 class CaetanoTSRJI(ImgType):
     stack_images = False
     ref_joints = ['4', '8', '12', '16']
 
-    def __init__(self) -> None:
-        super().__init__('CaetanoTSRJI')
+    def __init__(self, input_format) -> None:
+        super().__init__('CaetanoTSRJI', input_format)
         self.width_resized = 100
         self.height_resized = len(self.reference_joint_4_NTU)
         self.num_imgs = 4
@@ -336,7 +367,6 @@ class CaetanoTSRJI(ImgType):
                 for i_frames in range(self.kinect_data.n_frames):
                     if self.kinect_data.kinect_blocks[i_frames].n_bodies > k_body:
                         for j_pos in range(len(self.reference_joint_4_NTU)):
-
                             j_joints = self.reference_joint_4_NTU[j_pos]
                             kj = self.kinect_data.kinect_blocks[i_frames].body_list[k_body].joint_data[j_joints]
                             imgs[0][j_pos, i_frames] = (kj.x_joint, kj.y_joint, kj.z_joint)
@@ -381,4 +411,4 @@ class_img_types: Dict[int, Type[Union[CaetanoMagnitude, CaetanoOrientation, Caet
     1: CaetanoMagnitude,
     2: CaetanoOrientation,
     3: CaetanoTSRJI
-}
+    }
