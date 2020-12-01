@@ -298,12 +298,12 @@ def show_data(path, dtype="kinect"):
 
     updates = lambda i: skeleton_data(kd, i, scat, ax, ann_list)
 
-    ani = animation.FuncAnimation(fig, updates, interval=1000./30, frames=len(kd.kinect_blocks), init_func=init)
+    ani = animation.FuncAnimation(fig, updates, interval=1000./10, frames=len(kd.kinect_blocks), init_func=init)
     plt.show()
 
 
 def main():
-    show_data("/media/david/Daten/datasets/kinetics/kinetics400-skeleton/kinetics_train/0eTmEksJUY0.json", dtype="openpose")
+    show_data("/home/david/datasets/kinetics/kinetics400-skeleton/kinetics_val/Vhf92EnnS7o.json", dtype="openpose")
     #show_data("/home/david/datasets/nturgbd/skeleton_csv/S001C001P001R001A009.skeleton", dtype="kinect")
 
     "/media/david/Daten/datasets/kinetics/kinetics-skeleton/kinetics_train/0074cdXclLU.json"

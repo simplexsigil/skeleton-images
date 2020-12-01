@@ -7,6 +7,7 @@ import numpy as np
 
 import KinectData as kd
 from KinectData import KinectData
+import gc
 
 
 class ImgType(object):
@@ -77,7 +78,10 @@ class ImgType(object):
 
     def __del__(self) -> None:
         del self.img_list
-        del self.kinect_data
+        try:
+            del self.kinect_data
+        except BaseException as e:
+            pass
 
     def compute_joint_difference(self, i_frame: int, j_joint: int, k_body: int) -> (float, float, float):
         ret = (0.0, 0.0, 0.0)
@@ -203,6 +207,7 @@ class CaetanoMagnitude(ImgType):
 
     def process_skl_file(self, skl_file: str, path_to_save: str, resize=True) -> str:
         extraction = ''
+
         list_path_to_save = []
         try:
             self.height_resized = len(ImgType.depth_first_traversal_skl[self.input_format])
@@ -211,7 +216,8 @@ class CaetanoMagnitude(ImgType):
             else:
                 self.set_channels(3)
             self.kinect_data.read_data(skl_file)
-            self.set_height(len(ImgType.depth_first_traversal_skl[self.input_format]))  # self.set_height(self.kinect_data.n_joints)
+            self.set_height(
+                len(ImgType.depth_first_traversal_skl[self.input_format]))  # self.set_height(self.kinect_data.n_joints)
             self.set_width(self.kinect_data.n_frames)
             for k_body in range(self.kinect_data.n_bodies):
                 img = np.zeros((self.height, self.width, self.channels), np.float)
@@ -233,15 +239,20 @@ class CaetanoMagnitude(ImgType):
                 f_save = self.generate_file_name(skl_file, k_body)
                 list_path_to_save.append(os.path.join(path_to_save, f_save))
             self.save_img_list(list_path_to_save)
-            extraction = 'OK\t' + skl_file + '\t' + str(self.temporal_scale)
+            extraction = 'OK\t' + skl_file
             print(extraction)
         except Exception as exception:
             extraction = 'ERROR\t' + skl_file + ' ' + str(exception)
             print(extraction)
         finally:
             del list_path_to_save
+            try:
+                del self.kinect_data
+            except BaseException as e:
+                pass
+
             self.img_list.clear()
-            return extraction
+            # gc.collect()
 
 
 # SkeleMotion - AVSS 2019
@@ -276,7 +287,8 @@ class CaetanoOrientation(ImgType):
             else:
                 self.set_channels(3)
             self.kinect_data.read_data(skl_file)
-            self.set_height(len(ImgType.depth_first_traversal_skl[self.input_format]))  # self.set_height(self.kinect_data.n_joints)
+            self.set_height(
+                len(ImgType.depth_first_traversal_skl[self.input_format]))  # self.set_height(self.kinect_data.n_joints)
             self.set_width(self.kinect_data.n_frames)
             list_path_to_save = []
             for k_body in range(self.kinect_data.n_bodies):
@@ -324,15 +336,15 @@ class CaetanoOrientation(ImgType):
                 f_save = self.generate_file_name(skl_file, k_body)
                 list_path_to_save.append(os.path.join(path_to_save, f_save))
             self.save_img_list(list_path_to_save)
-            extraction = 'OK\t' + skl_file + '\t' + str(self.temporal_scale)
+            extraction = 'OK\t' + skl_file
             print(extraction)
         except Exception as exception:
             extraction = 'ERROR\t' + skl_file + ' ' + str(exception)
             print(extraction)
         finally:
             del list_path_to_save
+            del self.kinect_data
             self.img_list.clear()
-            return extraction
 
 
 # Tree Structure Reference Joints Image (TSRJI) - SIBGRAPI 2019
@@ -353,7 +365,7 @@ class CaetanoTSRJI(ImgType):
         f_save = file_prefix + str(k_body + 1) + '_' + self.ref_joints[r_joint] + '_' + self.img_type + file_suffix
         return f_save
 
-    def process_skl_file(self, skl_file: str, path_to_save: str) -> str:
+    def process_skl_file(self, skl_file: str, path_to_save: str, force=False) -> str:
         extraction = ''
         try:
             self.set_channels(3)  # varies according to method
@@ -404,7 +416,6 @@ class CaetanoTSRJI(ImgType):
         finally:
             del list_path_to_save
             self.img_list.clear()
-            return extraction
 
 
 class_img_types: Dict[int, Type[Union[CaetanoMagnitude, CaetanoOrientation, CaetanoTSRJI]]] = {
