@@ -30,7 +30,8 @@ class ImgType(object):
                                           4, 10, 13, 7]
 
     depth_first_traversal_skl = {"nturgbd_csv":   depth_first_traversal_skl_NTU,
-                                 "openpose_json": depth_first_traversal_skl_OpenPose}
+                                 "openpose_json": depth_first_traversal_skl_OpenPose,
+                                 "alphapose_json": depth_first_traversal_skl_OpenPose}
 
     reference_joint_4_NTU = [1, 4, 20, 4, 2, 4, 3, 4, 2, 4, 20, 4, 5, 4, 6, 4, 7, 4, 21, 4, 22, 4, 21, 4,
                              7, 4, 6, 4, 5, 4, 20, 4, 8, 4, 9, 4, 10, 4, 11, 4, 23, 4, 24, 4, 23, 4, 11,

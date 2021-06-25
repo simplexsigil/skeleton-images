@@ -2,6 +2,8 @@ import json
 import math
 from typing import List
 
+import pandas as pd
+
 
 class KinectJoint(object):
     def __init__(self) -> None:
@@ -141,35 +143,6 @@ class OpenPoseData(object):
                 self.body_data.append(BodyData())
             self.n_bodies = len(self.body_data)
 
-    def read_block_NTU(self, file) -> None:
-        """Read NTU block of Kinect data."""
-        n_bodies = int(file.readline())
-        self.check_n_bodies(n_bodies)
-        body_list = []
-        for i_body in range(n_bodies):
-            data = file.readline()
-            split_str = data.split(' ')
-            body_id = split_str[0]
-            n_joints = int(file.readline())
-            joint_data = []
-            for i_joint in range(n_joints):
-                str_split = file.readline().split(' ')
-                x_joint = float(str_split[0])
-                y_joint = float(str_split[1])
-                z_joint = float(str_split[2])
-                joint_data.append(KinectJoint(x_joint, y_joint, z_joint))
-                self.body_data[i_body].compute_higher_lower_values(x_joint, y_joint, z_joint)
-            kinect_body = KinectBody(body_id, joint_data)
-            body_list.append(kinect_body)
-        if n_bodies > 0:
-            kb = KinectBlock(n_bodies, n_joints, body_list)
-        else:
-            n_joints = 25
-            kb = KinectBlock(n_bodies, n_joints, body_list)
-        self.kinect_blocks.append(kb)
-        if kb.n_bodies > self.n_bodies:
-            self.n_bodies = kb.n_bodies
-
     def read_block_OP(self, skeleton_data_frame) -> None:
         """Read frame of open pose data."""
         n_bodies = len(skeleton_data_frame["skeleton"])
@@ -178,7 +151,7 @@ class OpenPoseData(object):
         for i_body in range(n_bodies):
             data = skeleton_data_frame["skeleton"][i_body]
             n_joints = int(len(data["pose"]) / 2)
-            assert n_joints == 18
+            assert n_joints == 18, f"Expected 18 joints, found {n_joints}"
 
             joints_xys = skeleton_data_frame["skeleton"][i_body]["pose"]
             j_xs = [v for idx, v in enumerate(joints_xys) if idx % 2 == 0]
@@ -217,9 +190,83 @@ class OpenPoseData(object):
             self.n_frames = len(self.kinect_blocks)
 
 
+class AlphaPoseData(object):
+    kinect_blocks: List[KinectBlock]
+    perturbation_percent = 0.05
+
+    def __init__(self) -> None:
+        self.n_frames = 0
+        self.n_joints = 0
+        self.n_bodies = 0
+        self.kinect_blocks = []
+        self.n_bodies = 0
+        self.body_data = []
+
+    def __del__(self) -> None:
+        del self.kinect_blocks
+
+    def check_n_bodies(self, n_bodies: int) -> None:
+        if self.n_bodies < n_bodies:
+            for _ in range(n_bodies - self.n_bodies):
+                self.body_data.append(BodyData())
+            self.n_bodies = len(self.body_data)
+
+    def read_block(self, skeleton_data_frame) -> None:
+        """Read frame of open pose data."""
+        n_bodies = len(skeleton_data_frame)
+        self.check_n_bodies(n_bodies)
+        body_list = []
+        body_idx = 0
+        for _, data in skeleton_data_frame.iterrows():
+            n_joints = int(len(data["keypoints"]) / 3)
+            #assert n_joints == 18
+
+            joints_xys = data["keypoints"]
+            j_xs = [v/640. for idx, v in enumerate(joints_xys) if idx % 3 == 0]
+            j_ys = [-v/368. for idx, v in enumerate(joints_xys) if idx % 3 == 1]
+
+            joint_data = []
+            for i_joint in range(n_joints):
+                x_joint = j_xs[i_joint]
+                y_joint = j_ys[i_joint]
+                z_joint = 0.0
+                joint_data.append(KinectJoint(x_joint, y_joint, z_joint))
+                self.body_data[body_idx].compute_higher_lower_values(x_joint, y_joint, z_joint)
+            kinect_body = KinectBody(body_idx, joint_data)
+            body_list.append(kinect_body)
+            body_idx += 1
+        if n_bodies > 0:
+            kb = KinectBlock(n_bodies, n_joints, body_list)
+        else:
+            n_joints = 18
+            kb = KinectBlock(n_bodies, n_joints, body_list)
+        self.kinect_blocks.append(kb)
+        if kb.n_bodies > self.n_bodies:
+            self.n_bodies = kb.n_bodies
+
+    def read_data(self, file: str) -> None:
+        """Read the Kinect data from alphapose skeleton file."""
+        with open(file) as f:
+            skeleton_info = json.load(f)
+            skeleton_info = pd.DataFrame(skeleton_info)
+            n_frames = len(list(set(skeleton_info["image_id"])))
+
+            assert n_frames > 0, "No frames found."
+
+            for i in range(n_frames):
+                frame_data = skeleton_info[skeleton_info["image_id"] == f"{i}.jpg"]
+                self.read_block(frame_data)
+
+            self.n_joints = self.kinect_blocks[0].n_joints  # OP = 18
+
+            # Get by blocks, because there are some frames without skeleton data
+            self.n_frames = len(self.kinect_blocks)
+
+
 def from_format_desc(input_format):
     in_types = {"nturgbd_csv":   KinectData,
-                "openpose_json": OpenPoseData}
+                "openpose_json": OpenPoseData,
+                "alphapose_json": AlphaPoseData}
 
     return in_types[input_format]()
 
@@ -279,6 +326,9 @@ def show_data(path, dtype="kinect"):
         elif dtype == "kinect":
             kd = KinectData()
             kd.read_data(path)
+        elif dtype == "alphapose":
+            kd = AlphaPoseData()
+            kd.read_data(path)
         else:
             raise ValueError
 
@@ -303,10 +353,11 @@ def show_data(path, dtype="kinect"):
 
 
 def main():
-    show_data("/home/david/datasets/kinetics/kinetics400-skeleton/kinetics_val/Vhf92EnnS7o.json", dtype="openpose")
+    #show_data("/home/david/datasets/kinetics/kinetics400-skeleton/kinetics_val/Vhf92EnnS7o.json", dtype="openpose")
     #show_data("/home/david/datasets/nturgbd/skeleton_csv/S001C001P001R001A009.skeleton", dtype="kinect")
+    show_data("/home/david/datasets/sims_dataset/poses/Dr_S2K2_fC18.json", dtype="alphapose")
 
-    "/media/david/Daten/datasets/kinetics/kinetics-skeleton/kinetics_train/0074cdXclLU.json"
+    #"/media/david/Daten/datasets/kinetics/kinetics-skeleton/kinetics_train/0074cdXclLU.json"
 
 
 if __name__ == '__main__':

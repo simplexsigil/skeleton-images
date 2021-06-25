@@ -23,7 +23,7 @@ def get_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
                         default=False)
     parser.add_argument('--force', nargs='?', type=bool, const=True,
                         help='If true, images will be replaced although they already exist.', default=False)
-    parser.add_argument('--input_format', type=str, choices=["nturgbd_csv", "openpose_json"], default="openpose_json",
+    parser.add_argument('--input_format', type=str, choices=["nturgbd_csv", "openpose_json", "alphapose_json"], default="openpose_json",
                         help='If true, images will be resized to a fixed width of 100, independent of frame count.')
     args = parser.parse_args()
     print(args)
@@ -43,9 +43,16 @@ def get_skeleton_files_csv(data_path: str) -> List[str]:
     return file_list
 
 
-def get_skeleton_files_json(data_path: str) -> List[str]:
+def get_skeleton_files_json(data_path: str, levels=2) -> List[str]:
+    """
+
+    :param data_path:
+    :param levels: Number of levels below root. 1 level: No subdirectories.
+    :return:
+    """
     file_list = []
-    for file in glob.glob(os.path.join(data_path, '**', '*.json')):
+    # json files are exactly n-1 levels below root (1 level: no subdirectories)
+    for file in glob.glob(os.path.join(data_path, *(['**']*(levels-1)), '*.json')):
         file_list.append(file)
     return file_list
 
@@ -70,12 +77,15 @@ def worker(args: tuple):
 def main(parser: argparse.ArgumentParser) -> None:
     args = get_arguments(parser)
     print(args)
+    args.data_path = os.path.expanduser(args.data_path)
+    args.path_to_save = os.path.expanduser(args.path_to_save)
+
     check_path(args.path_to_save)
     skl_list = []
     if args.input_format == "nturgbd_csv":
         skl_list = get_skeleton_files_csv(args.data_path)
     elif args.input_format == "openpose_json":
-        skl_list = get_skeleton_files_json(args.data_path)
+        skl_list = get_skeleton_files_json(args.data_path, levels=1)
         if not args.force:
             ending = ""
             if args.img_type == 1:
@@ -86,6 +96,23 @@ def main(parser: argparse.ArgumentParser) -> None:
             existing_files = glob.glob(f"{args.path_to_save}/**/*{ending}")
             existing_ids = set(map(lambda fl: os.path.split(fl)[-1][:11], existing_files))
             sk_ids = list(map(lambda fl: os.path.split(fl)[-1][:11], skl_list))
+
+            count = len(skl_list)
+            skl_list = [fl for fl, fl_id in zip(skl_list, sk_ids) if fl_id not in existing_ids]
+            print(f"Skipped {count - len(skl_list)} files due to preexisting content on location.")
+            print(f"{len(skl_list)} files are remaining.")
+    elif args.input_format == "alphapose_json":
+        skl_list = get_skeleton_files_json(args.data_path, levels=1)
+        if not args.force:
+            ending = ""
+            if args.img_type == 1:
+                ending = "_CaetanoMagnitude.json.npz"
+            elif args.img_type == 2:
+                ending = "_CaetanoOrientation.json.npz"
+
+            existing_files = glob.glob(f"{args.path_to_save}/**/*{ending}")
+            existing_ids = set(map(lambda fl: os.path.split(fl)[-1][:-len(ending)], existing_files))
+            sk_ids = list(map(lambda fl: os.path.split(fl)[-1][:-5], skl_list))
 
             count = len(skl_list)
             skl_list = [fl for fl, fl_id in zip(skl_list, sk_ids) if fl_id not in existing_ids]
